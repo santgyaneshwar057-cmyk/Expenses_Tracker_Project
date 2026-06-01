@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Expense Tracker</title>
+    <!--Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Icons for aesthetic icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Main JS -->
+    <script type="module" src="./main.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Firebase Config -->
+    <script type="module" src="./firebase-config.js"></script>
+
+
+
+    <style>
+        /* Custom styles */
+        :root {
+            --primary-blue: #2563eb; /* Blue 600 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc; /* Light gray background */
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .card {
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e5e7eb;
+        }
+        .btn-primary {
+            background-color: var(--primary-blue);
+            transition: background-color 0.15s;
+        }
+        .btn-primary:hover {
+            background-color: #1e40af; /* Blue 800 */
+        }
+        /* Style for the budget progress bar */
+        #utilizationBar {
+            height: 8px;
+            border-radius: 4px;
+            background-color: #e5e7eb;
+            overflow: hidden;
+        }
+        #utilizationFill {
+            transition: width 0.5s ease-in-out;
+            height: 100%;
+            border-radius: 4px;
+        }
+
+        /* Ensure canvas fills container */
+        .chart-wrap {
+            position: relative;
+            height: 100%;
+            width: 100%;
+        }
+        .chart-canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-white/90 z-50 flex justify-center items-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>
+
+    <!-- Message pop up -->
+    <div id="messageBox" class="fixed top-4 right-4 z-50 transition-transform duration-300 transform translate-x-full">
+        <div class="bg-blue-600 text-white p-4 rounded-lg shadow-xl max-w-xs" role="alert">
+            <div id="messageText"></div>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="appContainer" class="min-h-screen">
+        <!-- NAVIGATION BAR (Shared) -->
+        <nav id="navbar" class="bg-white shadow-md">
+            <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                    <span class="text-3xl text-blue-600">💸</span>
+                    <span class="text-xl font-bold text-gray-800">Expense Tracker</span>
+                </div>
+                <!-- Nav links change based on auth state -->
+                <div class="flex items-center space-x-4">
+                    
+                    <!-- 1. Dashboard Links -->
+                    <div id="dashboardNav" class="hidden md:flex items-center space-x-4 font-medium text-gray-600">
+                        <button class="hover:text-blue-600" data-view="dashboard">Dashboard</button>
+                        <button class="hover:text-blue-600" data-view="expenses">Expenses</button>
+                        <button class="hover:text-blue-600" data-view="add-expense">Add Expense</button>
+                    </div>
+
+                    <!-- 2. User and Logout  -->
+                    <div id="userNav" class="hidden items-center space-x-3">
+                        <span id="userEmail" class="text-sm font-semibold text-gray-700"></span>
+                        <button id="logoutBtn" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 text-sm rounded-lg font-semibold">Logout</button>
+                    </div>
+
+                    <!-- 3. Auth Links  -->
+                    <div id="authNav" class="items-center space-x-3">
+                        <button data-view="login" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm rounded-lg font-semibold">Login</button>
+                        <button data-view="signup" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 text-sm rounded-lg font-semibold">Sign Up</button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- MAIN CONTENT -->
+        <main class="container mx-auto p-4 md:p-8">
+
+            <!-- 1. LANDING page-->
+            <section id="landingView" class="hidden text-center py-20">
+                <h1 class="text-5xl md:text-6xl font-extrabold text-gray-900 leading-tight">
+                    Take Control of Your <span class="text-blue-600">Finances</span>
+                </h1>
+                <p class="mt-4 text-lg text-gray-600 max-w-3xl mx-auto">
+                    Track your expenses, manage your budget, and gain insights into your spending habits
+                    with our comprehensive expense tracking solution.
+                </p>
+                <div class="mt-8 space-x-4">
+                    <button data-view="signup" class="btn-primary text-white px-8 py-3 rounded-xl text-lg font-semibold shadow-lg shadow-blue-500/50">
+                        Get Started Free
+                    </button>
+                    <button data-view="login" class="bg-white text-gray-800 border border-gray-300 px-8 py-3 rounded-xl text-lg font-semibold hover:bg-gray-50">
+                        Sign In
+                    </button>
+                </div>
+
+                <div class="mt-20">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-12">Everything You Need to Manage Your Money</h2>
+                    <div class="grid md:grid-cols-3 gap-8 text-left">
+                        <div class="card p-6 flex flex-col items-start">
+                            <span data-lucide="bar-chart-2" class="text-blue-600 h-8 w-8 mb-4"></span>
+                            <h3 class="text-xl font-bold mb-2">Smart Analytics</h3>
+                            <p class="text-gray-600">Visualize your spending patterns with interactive charts and detailed analytics to make informed financial decisions.</p>
+                        </div>
+                        <div class="card p-6 flex flex-col items-start">
+                            <span data-lucide="credit-card" class="text-blue-600 h-8 w-8 mb-4"></span>
+                            <h3 class="text-xl font-bold mb-2">Budget Management</h3>
+                            <p class="text-gray-600">Set monthly budgets and track your progress with real-time alerts when you're approaching your limits.</p>
+                        </div>
+                        <div class="card p-6 flex flex-col items-start">
+                            <span data-lucide="smartphone" class="text-blue-600 h-8 w-8 mb-4"></span>
+                            <h3 class="text-xl font-bold mb-2">Mobile Responsive</h3>
+                            <p class="text-gray-600">Access your expense data anywhere with our fully responsive design that works perfectly on all devices.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. AUTH VIEW (Login/Signup Forms) -->
+            <section id="authView" class="hidden py-12">
+                <div class="max-w-md mx-auto card">
+                    <div id="loginForm" class="hidden">
+                        <h2 class="text-3xl font-bold mb-2 text-gray-800 text-center">Sign in to your account</h2>
+                        <p class="text-center text-gray-500 mb-6">Start tracking your expenses today.</p>
+                        <div class="space-y-4">
+                            <input id="loginEmail" class="w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Email address" type="email" required />
+                            <div class="relative">
+                                <input id="loginPassword" class="w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Password (min 6 characters)" type="password" required />
+                                <span onclick="togglePassword('loginPassword')" class="absolute right-3 top-3.5 cursor-pointer text-gray-400" data-lucide="eye-off"></span>
+                            </div>
+                            <button id="loginBtn" class="w-full btn-primary text-white py-3 rounded-lg font-semibold shadow-md">Sign In</button>
+                            <p class="text-center mt-4 text-sm text-gray-500">
+                                Don't have an account? <button data-view="signup" class="text-blue-600 hover:text-blue-800 font-medium">Create one here</button>
+                            </p>
+                        </div>
+                    </div>
+                    <div id="signupForm" class="hidden">
+                        <h2 class="text-3xl font-bold mb-2 text-gray-800 text-center">Create your account</h2>
+                        <p class="text-center text-gray-500 mb-6">Start tracking your expenses today.</p>
+                        <div class="space-y-4">
+                            <input id="signupName" class="w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Full Name" type="text" required />
+                            <input id="signupEmail" class="w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Email address" type="email" required />
+                            <div class="relative">
+                                <input id="signupPassword" class="w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Password (min 6 characters)" type="password" required />
+                                <span onclick="togglePassword('signupPassword')" class="absolute right-3 top-3.5 cursor-pointer text-gray-400" data-lucide="eye-off"></span>
+                            </div>
+                            <div class="relative">
+                                <input id="confirmPassword" class="w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="Confirm your password" type="password" required />
+                                <span onclick="togglePassword('confirmPassword')" class="absolute right-3 top-3.5 cursor-pointer text-gray-400" data-lucide="eye-off"></span>
+                            </div>
+                            <button id="signupBtn" class="w-full btn-primary text-white py-3 rounded-lg font-semibold shadow-md flex justify-center items-center space-x-2">
+                                <span data-lucide="user-plus" class="w-5 h-5"></span><span>Create Account</span>
+                            </button>
+                            <p class="text-center mt-4 text-sm text-gray-500">
+                                Already have an account? <button data-view="login" class="text-blue-600 hover:text-blue-800 font-medium">Sign in here</button>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. DASHBOARD VIEW (Authenticated) -->
+            <section id="dashboardView" class="hidden py-8 space-y-8">
+                <h1 class="text-3xl font-extrabold text-gray-900">Dashboard</h1>
+                <p class="text-gray-500 -mt-3">Overview of your financial activity</p>
+
+                <!-- Budget Management Card -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-xl font-bold text-gray-800">Budget Management</h3>
+                        <button id="editBudgetBtn" class="text-blue-600 hover:text-blue-800 font-medium flex items-center space-x-1 text-sm">
+                            <span data-lucide="pencil" class="w-4 h-4"></span><span>Edit Budget</span>
+                        </button>
+                    </div>
+
+                    <div class="grid md:grid-cols-3 gap-6 items-center">
+                        <div>
+                            <p class="text-gray-500 text-sm">Monthly Budget</p>
+                            <p id="budgetDisplay" class="text-2xl font-bold text-gray-800">₹0.00</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-500 text-sm">Remaining</p>
+                            <p id="remainingDisplay" class="text-2xl font-bold text-green-600">₹0.00</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-500 text-sm mb-1">Utilization</p>
+                            <div id="utilizationBar">
+                                <div id="utilizationFill" class="bg-blue-500" style="width: 0%;"></div>
+                            </div>
+                            <p id="utilizationPct" class="text-sm font-medium mt-1 text-gray-600">0%</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <!-- This Month -->
+                    <div class="card p-5">
+                        <div class="flex items-center space-x-3">
+                            <span data-lucide="calendar" class="text-red-500 h-6 w-6"></span>
+                            <span class="text-lg font-semibold text-gray-600">This Month</span>
+                        </div>
+                        <p id="totalThisMonth" class="text-2xl font-bold mt-2 text-gray-800">₹0.00</p>
+                    </div>
+                    <!-- Last Month -->
+                    <div class="card p-5">
+                        <div class="flex items-center space-x-3">
+                            <span data-lucide="bar-chart-3" class="text-blue-500 h-6 w-6"></span>
+                            <span class="text-lg font-semibold text-gray-600">Last Month</span>
+                        </div>
+                        <p id="totalLastMonth" class="text-2xl font-bold mt-2 text-gray-800">₹0.00</p>
+                    </div>
+                    <!-- Change -->
+                    <div class="card p-5">
+                        <div class="flex items-center space-x-3">
+                            <span id="changeIcon" data-lucide="trending-up" class="text-green-500 h-6 w-6"></span>
+                            <span class="text-lg font-semibold text-gray-600">Change</span>
+                        </div>
+                        <p id="changePct" class="text-2xl font-bold mt-2 text-green-500">0%</p>
+                    </div>
+                    <!-- Highest Expense -->
+                    <div class="card p-5">
+                        <div class="flex items-center space-x-3">
+                            <span data-lucide="chevrons-up" class="text-yellow-500 h-6 w-6"></span>
+                            <span class="text-lg font-semibold text-gray-600">Highest Expense</span>
+                        </div>
+                        <p id="highestExpense" class="text-2xl font-bold mt-2 text-gray-800">₹0.00</p>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="grid md:grid-cols-2 gap-8">
+                    <!-- Category Breakdown -->
+                    <div class="card p-6 h-96">
+                        <h3 class="text-xl font-bold mb-4">Category Breakdown</h3>
+                        <div class="chart-wrap h-full">
+                            <canvas id="categoryChart" class="chart-canvas"></canvas>
+                        </div>
+                    </div>
+                    <!-- Monthly Spending Trend -->
+                    <div class="card p-6 h-96">
+                        <h3 class="text-xl font-bold mb-4">Monthly Spending Trend</h3>
+                        <div class="chart-wrap h-full">
+                            <canvas id="monthlyTrendChart" class="chart-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. EXPENSES VIEW -->
+            <section id="expensesView" class="hidden py-8 space-y-6">
+                <h1 class="text-3xl font-extrabold text-gray-900">All Expenses</h1>
+                <div class="card overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Note</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expensesTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Expenses will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 5. ADD EXPENSE VIEW -->
+            <section id="addExpenseView" class="hidden py-8 space-y-6">
+                <h1 class="text-3xl font-extrabold text-gray-900">Add New Expense</h1>
+                <div class="max-w-xl mx-auto card">
+                    <form id="addExpenseForm" class="space-y-4">
+                        
+                        <label class="block">
+                            <span class="text-gray-700">Amount (₹) <span class="text-red-500">*</span></span>
+                            <input id="expenseAmount" type="number" step="0.01" min="0.01" placeholder="0.00" required class="mt-1 block w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500" />
+                        </label>
+                        <label class="block">
+                            <span class="text-gray-700">Category <span class="text-red-500">*</span></span>
+                            <select id="expenseCategory" required class="mt-1 block w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                                <option value="Food">Food & Dining</option>
+                                <option value="Transport">Transportation</option>
+                                <option value="Utilities">Utilities</option>
+                                <option value="Shopping">Shopping</option>
+                                <option value="Income">Income (to track as negative)</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </label>
+                        <label class="block">
+                            <span class="text-gray-700">Date <span class="text-red-500">*</span></span>
+                            <input id="expenseDate" type="date" required class="mt-1 block w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500" />
+                        </label>
+                        <label class="block">
+                            <span class="text-gray-700">Note (Optional)</span>
+                            <textarea id="expenseNote" rows="2" class="mt-1 block w-full border p-3 rounded-lg focus:ring-blue-500 focus:border-blue-500" placeholder="A brief description..."></textarea>
+                        </label>
+                        <button type="submit" class="w-full btn-primary text-white py-3 rounded-lg font-semibold shadow-md">Record Expense</button>
+                    </form>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+   
+</body>
+</html>
